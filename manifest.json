@@ -1,6 +1,6 @@
 {
-  "name": "Neon Arcade",
-  "short_name": "Arcade",
+  "name": "Syrix Connect_4",
+  "short_name": "Connect_4",
   "start_url": "index.html",
   "display": "standalone",
   "background_color": "#05070a",
