@@ -1,7 +1,21 @@
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open('arcade-v1').then((cache) => cache.addAll(['index.html'])));
+const CACHE_NAME = 'neon-arcade-v1';
+const ASSETS = [
+  './index.html',
+  './manifest.json'
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(ASSETS);
+    })
+  );
 });
 
-self.addEventListener('fetch', (e) => {
-  e.respondWith(caches.match(e.request).then((response) => response || fetch(e.request)));
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.match(event.request).then((response) => {
+      return response || fetch(event.request);
+    })
+  );
 });
