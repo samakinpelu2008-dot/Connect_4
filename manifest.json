@@ -5,7 +5,13 @@
   "display": "standalone",
   "background_color": "#05070a",
   "theme_color": "#00d2ff",
+  "description": "Retro Neon Connect 4 Arcade Game",
   "icons": [
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }
