@@ -1,23 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <link rel="manifest" href="manifest.json">
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js');
-  }
-</script>
-    
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SYRIX CONNECT_4</title>
+    <title>Neon Connect Arcade</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#05070a">
+
     <style>
         :root {
             --bg: #05070a; --panel: #111827; --red: #ff4757; --yellow: #eccc68; --blue: #00d2ff;
         }
         body, html { 
             margin: 0; padding: 0; height: 100%; background: var(--bg); color: white;
-            font-family: 'Segoe UI', sans-serif; overflow: hidden;
+            font-family: 'Segoe UI', sans-serif; overflow: hidden; touch-action: manipulation;
         }
         #lobby, #game-screen { 
             position: fixed; inset: 0; display: flex; flex-direction: column; 
@@ -29,14 +26,14 @@
         }
         button, select { 
             width: 100%; padding: 15px; margin: 10px 0; border-radius: 10px; 
-            border: none; font-weight: bold; cursor: pointer; 
+            border: none; font-weight: bold; cursor: pointer; font-size: 16px;
         }
         .btn-primary { background: var(--blue); color: #000; }
         .mode-btn { background: #374151; color: white; border: 2px solid transparent; }
-        .mode-btn.active { border-color: var(--blue); }
+        .mode-btn.active { border-color: var(--blue); background: #1f2937; }
         
         .stats { display: flex; gap: 20px; margin-bottom: 15px; }
-        .score-box { padding: 8px 15px; border-radius: 10px; background: #1f2937; font-weight: bold; }
+        .score-box { padding: 8px 15px; border-radius: 10px; background: #1f2937; font-weight: bold; min-width: 80px; text-align: center; }
         
         .board-wrapper {
             position: relative; width: 95vw; max-width: 400px; aspect-ratio: 7/6;
@@ -45,7 +42,7 @@
         }
         .slot { 
             width: 100%; aspect-ratio: 1/1; background: #0f172a; 
-            border-radius: 50%; position: relative; 
+            border-radius: 50%; position: relative;
         }
         .disc {
             width: 100%; height: 100%; border-radius: 50%; position: absolute;
@@ -56,7 +53,7 @@
         .p2 { background: var(--yellow); box-shadow: 0 0 15px var(--yellow); }
 
         #win-line-svg {
-            position: absolute; inset: 0; pointer-events: none; z-index: 10;
+            position: absolute; inset: 0; pointer-events: none; z-index: 10; width: 100%; height: 100%;
         }
         line { stroke: white; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 1000; stroke-dashoffset: 1000; animation: draw 0.6s forwards; }
         @keyframes draw { to { stroke-dashoffset: 0; } }
@@ -66,10 +63,10 @@
 
     <div id="lobby">
         <div class="menu-card">
-            <h1 style="color:var(--blue)">NEON 4</h1>
-            <button class="mode-btn active" onclick="setMode('pvp', this)">2 PLAYERS</button>
-            <button class="mode-btn" onclick="setMode('pvc', this)">VS COMPUTER</button>
-            <p>Match Length</p>
+            <h1 style="color:var(--blue); margin: 0 0 10px;">NEON 4</h1>
+            <button class="mode-btn active" id="btn-pvp" onclick="setMode('pvp')">2 PLAYERS</button>
+            <button class="mode-btn" id="btn-pvc" onclick="setMode('pvc')">VS COMPUTER</button>
+            <p style="margin: 15px 0 5px;">Match Length</p>
             <select id="rounds">
                 <option value="1">1 Round</option><option value="3">3 Rounds</option>
                 <option value="5">5 Rounds</option><option value="11">11 Rounds</option>
@@ -87,24 +84,42 @@
         <div class="board-wrapper" id="board-ui">
             <svg id="win-line-svg"></svg>
         </div>
-        <button style="width:auto; margin-top:20px; background:#374151; color:white" onclick="location.reload()">MAIN MENU</button>
+        <button style="width:auto; margin-top:20px; background:#374151; color:white; padding: 10px 25px;" onclick="location.reload()">MAIN MENU</button>
     </div>
 
 <script>
+    // --- Register Service Worker for PWA "Install" Button ---
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('SW Registered'))
+                .catch(err => console.log('SW Failed', err));
+        });
+    }
+
     let mode = 'pvp', maxRounds = 1, scores = {p1:0, p2:0};
     let currentPlayer = 1, board = [], gameActive = false;
-    let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let audioCtx = null;
 
-    function setMode(m, btn) {
+    function initAudio() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function setMode(m) {
         mode = m;
-        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+        document.getElementById('btn-pvp').classList.toggle('active', m === 'pvp');
+        document.getElementById('btn-pvc').classList.toggle('active', m === 'pvc');
     }
 
     function startGame() {
+        initAudio();
         maxRounds = parseInt(document.getElementById('rounds').value);
         document.getElementById('lobby').style.display = 'none';
         document.getElementById('game-screen').style.display = 'flex';
+        scores = {p1:0, p2:0};
+        document.getElementById('s1').innerText = `P1: 0`;
+        document.getElementById('s2').innerText = `P2: 0`;
         initMatch();
     }
 
@@ -134,13 +149,12 @@
             if(board[r][c] === 0) {
                 board[r][c] = currentPlayer;
                 renderDisc(r, c);
-                beep(200 + (r*40), 'sine');
-
+                beep(200 + (r*40), 'sine', 0.1);
                 const winPath = checkWin(r, c);
                 if(winPath) {
                     processWin(winPath);
                 } else if(board.flat().every(v => v !== 0)) {
-                    alert("Draw!"); initMatch();
+                    setTimeout(() => { alert("Draw!"); initMatch(); }, 500);
                 } else {
                     currentPlayer = currentPlayer === 1 ? 2 : 1;
                     updateStatus();
@@ -155,38 +169,34 @@
         const disc = document.createElement('div');
         disc.className = `disc ${currentPlayer===1 ? 'p1' : 'p2'}`;
         document.getElementById(`r${r}c${c}`).appendChild(disc);
-        setTimeout(() => disc.classList.add('dropped'), 10);
+        setTimeout(() => disc.classList.add('dropped'), 20);
     }
 
     function checkWin(r, c) {
         const p = board[r][c];
-        const directions = [[0,1],[1,0],[1,1],[1,-1]]; // Horizontal, Vertical, Diagonals
+        const directions = [[0,1],[1,0],[1,1],[1,-1]]; 
         for(let [dr, dc] of directions) {
             let path = [[r, c]];
             [[dr,dc], [-dr,-dc]].forEach(([sr, sc]) => {
                 let nr = r + sr, nc = c + sc;
                 while(nr>=0 && nr<6 && nc>=0 && nc<7 && board[nr][nc] === p) {
-                    path.push([nr, nc]);
-                    nr += sr; nc += sc;
+                    path.push([nr, nc]); nr += sr; nc += sc;
                 }
             });
-            if(path.length >= 4) return path;
+            if(path.length >= 4) return path.sort((a,b) => a[0]-b[0] || a[1]-b[1]);
         }
         return null;
     }
 
     function cpuLogic() {
-        // Simple AI: 1. Try to win, 2. Try to block player, 3. Random
-        const getValidCols = () => [0,1,2,3,4,5,6].filter(c => board[0][c] === 0);
-        const valid = getValidCols();
+        const valid = [0,1,2,3,4,5,6].filter(c => board[0][c] === 0);
+        if (valid.length === 0) return;
         let chosen = valid[Math.floor(Math.random()*valid.length)];
-        
-        // Blocking logic (Simplified)
         for(let c of valid) {
             for(let r=5; r>=0; r--) {
                 if(board[r][c] === 0) {
-                    board[r][c] = 1; // Test player win
-                    if(checkWin(r, c)) chosen = c;
+                    board[r][c] = 2; if(checkWin(r,c)) { board[r][c]=0; executeMove(c); return; }
+                    board[r][c] = 1; if(checkWin(r,c)) { board[r][c]=0; executeMove(c); return; }
                     board[r][c] = 0; break;
                 }
             }
@@ -200,27 +210,24 @@
         scores[winner]++;
         document.getElementById(currentPlayer===1 ? 's1' : 's2').innerText = `${currentPlayer===1?'P1':'P2'}: ${scores[winner]}`;
         drawWinLine(path);
-        beep(400, 'square'); setTimeout(() => beep(600, 'square'), 150);
-
+        beep(400, 'square', 0.2); setTimeout(() => beep(600, 'square', 0.3), 150);
         setTimeout(() => {
             if(scores[winner] >= Math.ceil(maxRounds/2)) {
-                alert(`PLAYER ${currentPlayer} WINS THE MATCH!`);
-                location.reload();
+                alert(`PLAYER ${currentPlayer} WINS THE MATCH!`); location.reload();
             } else { initMatch(); }
-        }, 1600);
+        }, 1800);
     }
 
     function drawWinLine(path) {
         const svg = document.getElementById('win-line-svg');
         const bRect = document.getElementById('board-ui').getBoundingClientRect();
-        const start = document.getElementById(`r${path[0][0]}c${path[0][1]}`).getBoundingClientRect();
-        const end = document.getElementById(`r${path[path.length-1][0]}c${path[path.length-1][1]}`).getBoundingClientRect();
-        
+        const s = document.getElementById(`r${path[0][0]}c${path[0][1]}`).getBoundingClientRect();
+        const e = document.getElementById(`r${path[path.length-1][0]}c${path[path.length-1][1]}`).getBoundingClientRect();
         const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line.setAttribute("x1", start.left + start.width/2 - bRect.left);
-        line.setAttribute("y1", start.top + start.height/2 - bRect.top);
-        line.setAttribute("x2", end.left + end.width/2 - bRect.left);
-        line.setAttribute("y2", end.top + end.height/2 - bRect.top);
+        line.setAttribute("x1", s.left + s.width/2 - bRect.left);
+        line.setAttribute("y1", s.top + s.height/2 - bRect.top);
+        line.setAttribute("x2", e.left + e.width/2 - bRect.left);
+        line.setAttribute("y2", e.top + e.height/2 - bRect.top);
         svg.appendChild(line);
     }
 
@@ -230,10 +237,13 @@
         s.style.color = currentPlayer === 1 ? 'var(--red)' : 'var(--yellow)';
     }
 
-    function beep(f, t) {
+    function beep(f, t, d) {
+        if (!audioCtx) return;
         const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-        o.type = t; o.frequency.value = f; g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.5);
-        o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.5);
+        o.type = t; o.frequency.setValueAtTime(f, audioCtx.currentTime);
+        g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d);
+        o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + d);
     }
 </script>
 </body>
