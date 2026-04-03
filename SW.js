@@ -1,7 +1,8 @@
 const CACHE_NAME = 'neon-arcade-v1';
 const ASSETS = [
   './index.html',
-  './manifest.json'
+  './manifest.json',
+  './images/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -12,10 +13,4 @@ self.addEventListener('install', (event) => {
   );
 });
 
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
-    })
-  );
-});
+// ... rest of the fetch code remains the same
