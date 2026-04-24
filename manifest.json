@@ -1,16 +1,24 @@
 {
-  "name": "Syrix Connect_4",
-  "short_name": "Connect_4",
-  "start_url": "index.html",
-  "display": "standalone",
-  "background_color": "#05070a",
-  "theme_color": "#00d2ff",
+  "short_name": "Neon 4",
+  "name": "Neon Connect Arcade",
   "icons": [
     {
-      "src": "images/icon-512.png",
-      "sizes": "512x512",
+      "src": "icon-192.png",
       "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "start_url": "./index.html",
+  "background_color": "#05070a",
+  "display": "standalone",
+  "scope": "./",
+  "theme_color": "#05070a",
+  "description": "High-speed neon connect four with online and offline modes.",
+  "orientation": "portrait"
 }
