@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Neon Connect Arcade</title>
-    
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#05070a">
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 
     <style>
         :root {
@@ -16,34 +18,47 @@
             margin: 0; padding: 0; height: 100%; background: var(--bg); color: white;
             font-family: 'Segoe UI', sans-serif; overflow: hidden; touch-action: manipulation;
         }
-        #lobby, #game-screen { 
-            position: fixed; inset: 0; display: flex; flex-direction: column; 
-            align-items: center; justify-content: center; padding: 20px; 
+
+        /* --- OVERLAYS --- */
+        #loading-overlay, #online-overlay {
+            position: fixed; inset: 0; background: var(--bg); z-index: 9999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
+        #online-overlay { background: rgba(5, 7, 10, 0.98); z-index: 5000; display: none; }
+
+        .loader {
+            width: 60px; height: 60px; border: 4px solid #1e293b;
+            border-top: 4px solid var(--blue); border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* --- UI COMPONENTS --- */
         .menu-card {
             background: var(--panel); padding: 30px; border-radius: 20px;
-            box-shadow: 0 0 30px rgba(0, 210, 255, 0.2); text-align: center; width: 100%; max-width: 350px;
+            box-shadow: 0 0 30px rgba(0, 210, 255, 0.2); text-align: center; width: 90%; max-width: 350px;
         }
-        button, select { 
+        button, select, input { 
             width: 100%; padding: 15px; margin: 10px 0; border-radius: 10px; 
-            border: none; font-weight: bold; cursor: pointer; font-size: 16px;
+            border: none; font-weight: bold; cursor: pointer; font-size: 16px; box-sizing: border-box;
         }
-        .btn-primary { background: var(--blue); color: #000; }
-        .mode-btn { background: #374151; color: white; border: 2px solid transparent; }
-        .mode-btn.active { border-color: var(--blue); background: #1f2937; }
+        input { background: #0f172a; border: 1px solid #374151; color: white; text-align: center; text-transform: uppercase; }
         
+        .btn-primary { background: var(--blue); color: #000; }
+        .mode-btn { background: #374151; color: white; }
+        .mode-btn.active { background: #1f2937; border: 2px solid var(--blue); }
+        
+        #lobby, #game-screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+
+        /* --- BOARD --- */
         .stats { display: flex; gap: 20px; margin-bottom: 15px; }
         .score-box { padding: 8px 15px; border-radius: 10px; background: #1f2937; font-weight: bold; min-width: 80px; text-align: center; }
-        
         .board-wrapper {
             position: relative; width: 95vw; max-width: 400px; aspect-ratio: 7/6;
             background: #1e293b; padding: 8px; border-radius: 12px;
             display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
         }
-        .slot { 
-            width: 100%; aspect-ratio: 1/1; background: #0f172a; 
-            border-radius: 50%; position: relative;
-        }
+        .slot { width: 100%; aspect-ratio: 1/1; background: #0f172a; border-radius: 50%; position: relative; touch-action: none; }
         .disc {
             width: 100%; height: 100%; border-radius: 50%; position: absolute;
             transform: translateY(-600%); transition: transform 0.4s cubic-bezier(0.47, 0, 0.74, 0.71);
@@ -52,73 +67,173 @@
         .p1 { background: var(--red); box-shadow: 0 0 15px var(--red); }
         .p2 { background: var(--yellow); box-shadow: 0 0 15px var(--yellow); }
 
-        #win-line-svg {
-            position: absolute; inset: 0; pointer-events: none; z-index: 10; width: 100%; height: 100%;
-        }
+        #win-line-svg { position: absolute; inset: 0; pointer-events: none; z-index: 10; width: 100%; height: 100%; }
         line { stroke: white; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 1000; stroke-dashoffset: 1000; animation: draw 0.6s forwards; }
         @keyframes draw { to { stroke-dashoffset: 0; } }
-        #lobby, #game-screen {
-    transition: opacity 0.3s ease-in-out;
-        }
-        
     </style>
 </head>
 <body>
 
-    <div id="lobby">
-        <div class="menu-card">
-            <h1 style="color:var(--blue); margin: 0 0 10px;">NEON 4</h1>
-            <button class="mode-btn active" id="btn-pvp" onclick="setMode('pvp')">2 PLAYERS</button>
-            <button class="mode-btn" id="btn-pvc" onclick="setMode('pvc')">VS COMPUTER</button>
-            <p style="margin: 15px 0 5px;">Match Length</p>
-            <select id="rounds">
-                <option value="1">1 Round</option><option value="3">3 Rounds</option>
-                <option value="5">5 Rounds</option><option value="11">11 Rounds</option>
-            </select>
-            <button class="btn-primary" onclick="startGame()">PLAY NOW</button>
-        </div>
-    </div>
+<div id="loading-overlay">
+    <div class="loader"></div>
+    <div id="loading-status">NEON SYSTEMS ONLINE</div>
+</div>
 
-    <div id="game-screen" style="display:none">
-        <div class="stats">
-            <div class="score-box" id="s1" style="color:var(--red)">P1: 0</div>
-            <div class="score-box" id="s2" style="color:var(--yellow)">P2: 0</div>
-        </div>
-        <div id="status" style="margin-bottom:10px; font-weight:bold">RED'S TURN</div>
-        <div class="board-wrapper" id="board-ui">
-            <svg id="win-line-svg"></svg>
-        </div>
-        <button style="width:auto; margin-top:20px; background:#374151; color:white; padding: 10px 25px;" onclick="goBackToMenu()">MAIN MENU</button>
+<div id="online-overlay">
+    <div class="menu-card" id="room-entry">
+        <h2 style="color:var(--blue)">ONLINE MATCH</h2>
+        <p>Enter Unique Room Code:</p>
+        <input type="text" id="room-input" placeholder="E.G. ARCADE7" maxlength="12">
+        <button class="btn-primary" onclick="initiateConnection()">SEARCH</button>
+        <button class="mode-btn" onclick="closeOnlineOverlay()">BACK</button>
     </div>
+    
+    <div class="menu-card" id="searching-state" style="display:none;">
+        <div class="loader" id="search-loader"></div>
+        <h2 id="search-status">SEARCHING...</h2>
+        <p id="room-display-code" style="color:var(--blue); font-weight:bold;"></p>
+        
+        <div id="admin-setup" style="display:none; border-top: 1px solid #374151; margin-top: 15px; padding-top: 10px;">
+            <p>Set Match Length:</p>
+            <select id="online-rounds">
+                <option value="1">1 Round</option>
+                <option value="3">3 Rounds</option>
+                <option value="5">5 Rounds</option>
+                <option value="7">7 Rounds</option>
+                <option value="11">11 Rounds</option>
+            </select>
+            <button class="btn-primary" onclick="adminStartGame()">START MATCH</button>
+        </div>
+        <button class="mode-btn" onclick="location.reload()">CANCEL</button>
+    </div>
+</div>
+
+<div id="lobby" style="display:none">
+    <div class="menu-card">
+        <h1 style="color:var(--blue); margin: 0 0 10px;">NEON 4</h1>
+        <button class="mode-btn active" id="btn-pvp" onclick="setMode('pvp')">2 PLAYERS (LOCAL)</button>
+        <button class="mode-btn" id="btn-pvc" onclick="setMode('pvc')">VS COMPUTER</button>
+        <button class="mode-btn" onclick="openOnlineOverlay()" style="border: 1px dashed var(--blue)">FRIEND MATCH (ONLINE)</button>
+        
+        <div id="local-rounds-area">
+            <p style="margin: 15px 0 5px;">Rounds</p>
+            <select id="rounds">
+                <option value="1">1 Round</option>
+                <option value="3">3 Rounds</option>
+                <option value="5">5 Rounds</option>
+                <option value="7">7 Rounds</option>
+                <option value="11">11 Rounds</option>
+            </select>
+        </div>
+        
+        <button class="btn-primary" onclick="startGame()">PLAY NOW</button>
+    </div>
+</div>
+
+<div id="game-screen" style="display:none">
+    <div class="stats">
+        <div class="score-box" id="s1" style="color:var(--red)">P1: 0</div>
+        <div class="score-box" id="s2" style="color:var(--yellow)">P2: 0</div>
+    </div>
+    <div id="status" style="margin-bottom:10px; font-weight:bold">RED'S TURN</div>
+    <div class="board-wrapper" id="board-ui"><svg id="win-line-svg"></svg></div>
+    <button style="width:auto; margin-top:20px; background:#374151; color:white; padding: 10px 25px;" onclick="location.reload()">QUIT MATCH</button>
+</div>
 
 <script>
-    // --- Register Service Worker for PWA "Install" Button ---
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('sw.js')
-                .then(reg => console.log('SW Registered'))
-                .catch(err => console.log('SW Failed', err));
-        });
-    }
+    const firebaseConfig = {
+        apiKey: "AIzaSyBRbBv2a3ZksTkhwdj_1-DwGP821Y8PY5Q",
+        authDomain: "neon-4-6f329.firebaseapp.com",
+        projectId: "neon-4-6f329",
+        databaseURL: "https://neon-4-6f329-default-rtdb.firebaseio.com",
+        storageBucket: "neon-4-6f329.firebasestorage.app",
+        messagingSenderId: "332542322128",
+        appId: "1:332542322128:web:593b8b7e1d33f74edd05d5"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
     let mode = 'pvp', maxRounds = 1, scores = {p1:0, p2:0};
-    let currentPlayer = 1, board = [], gameActive = false;
-    let audioCtx = null;
+    let currentPlayer = 1, board = [], gameActive = false, audioCtx = null;
+    let gameId = null, playerRole = null;
 
-    function initAudio() {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-    }
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            document.getElementById('loading-overlay').style.display = 'none';
+            document.getElementById('lobby').style.display = 'flex';
+        }, 2000);
+        
+        document.getElementById('room-input').addEventListener('input', function() {
+            this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        });
+    });
 
     function setMode(m) {
         mode = m;
         document.getElementById('btn-pvp').classList.toggle('active', m === 'pvp');
         document.getElementById('btn-pvc').classList.toggle('active', m === 'pvc');
+        document.getElementById('local-rounds-area').style.opacity = '1';
+    }
+
+    function openOnlineOverlay() { document.getElementById('online-overlay').style.display = 'flex'; }
+    function closeOnlineOverlay() { document.getElementById('online-overlay').style.display = 'none'; }
+
+    async function initiateConnection() {
+        const val = document.getElementById('room-input').value.trim();
+        if (!val) return;
+        gameId = `room_${val}`;
+        document.getElementById('room-entry').style.display = 'none';
+        document.getElementById('searching-state').style.display = 'block';
+        document.getElementById('room-display-code').innerText = `CODE: ${val}`;
+
+        const roomRef = db.ref(`games/${gameId}`);
+        roomRef.transaction((current) => {
+            if (current === null) return { players: 1, gameStarted: false, turn: 1, lastMove: null, rounds: 1 };
+            if (current.players === 1) { current.players = 2; return current; }
+            return; 
+        }, (err, committed, snap) => {
+            if (!committed) { alert("Room Full!"); location.reload(); return; }
+            playerRole = snap.val().players;
+            monitorConnection();
+        });
+    }
+
+    function monitorConnection() {
+        const ref = db.ref(`games/${gameId}`);
+        ref.on('value', (s) => {
+            const d = s.val();
+            if (!d) return;
+            if (playerRole === 1) {
+                if (d.players === 2) {
+                    document.getElementById('search-status').innerText = "OPPONENT CONNECTED!";
+                    document.getElementById('search-loader').style.display = 'none';
+                    document.getElementById('admin-setup').style.display = 'block';
+                }
+            } else {
+                document.getElementById('search-status').innerText = "WAITING FOR ADMIN...";
+                if (d.gameStarted) {
+                    ref.off();
+                    maxRounds = d.rounds; mode = 'online';
+                    document.getElementById('online-overlay').style.display = 'none';
+                    startGame();
+                }
+            }
+        });
+        if (playerRole === 1) ref.onDisconnect().remove();
+    }
+
+    function adminStartGame() {
+        const r = parseInt(document.getElementById('online-rounds').value);
+        db.ref(`games/${gameId}`).update({ gameStarted: true, rounds: r });
+        maxRounds = r; mode = 'online';
+        document.getElementById('online-overlay').style.display = 'none';
+        startGame();
     }
 
     function startGame() {
-        initAudio();
-        maxRounds = parseInt(document.getElementById('rounds').value);
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (mode !== 'online') maxRounds = parseInt(document.getElementById('rounds').value);
         document.getElementById('lobby').style.display = 'none';
         document.getElementById('game-screen').style.display = 'flex';
         scores = {p1:0, p2:0};
@@ -135,35 +250,45 @@
         for(let r=0; r<6; r++) {
             for(let c=0; c<7; c++) {
                 const s = document.createElement('div');
-                s.className = 'slot'; s.id = `r${r}c${c}`;
-                s.onclick = () => handleMove(c);
+                s.className = 'slot';
+                s.onclick = () => {
+                    if (!gameActive) return;
+                    if (mode === 'pvc' && currentPlayer === 2) return;
+                    if (mode === 'online' && currentPlayer !== playerRole) return;
+                    executeMove(c);
+                };
                 ui.appendChild(s);
             }
+        }
+        if (mode === 'online') {
+            db.ref(`games/${gameId}`).on('value', (s) => {
+                const d = s.val();
+                if (d && d.lastMove && d.turn === playerRole) executeMove(d.lastMove.c, true);
+            });
         }
         updateStatus();
     }
 
-    function handleMove(c) {
-        if(!gameActive || (mode==='pvc' && currentPlayer===2)) return;
-        executeMove(c);
-    }
-
-    function executeMove(c) {
+    async function executeMove(c, isRemote = false) {
         for(let r=5; r>=0; r--) {
             if(board[r][c] === 0) {
                 board[r][c] = currentPlayer;
                 renderDisc(r, c);
                 beep(200 + (r*40), 'sine', 0.1);
-                const winPath = checkWin(r, c);
-                if(winPath) {
-                    processWin(winPath);
-                } else if(board.flat().every(v => v !== 0)) {
-                    setTimeout(() => { alert("Draw!"); initMatch(); }, 500);
-                } else {
-                    currentPlayer = currentPlayer === 1 ? 2 : 1;
-                    updateStatus();
-                    if(mode==='pvc' && currentPlayer===2) setTimeout(cpuLogic, 600);
+                if (mode === 'online' && !isRemote) {
+                    await db.ref(`games/${gameId}`).update({ lastMove:{r,c}, turn: currentPlayer===1?2:1 });
                 }
+                gameActive = false;
+                setTimeout(() => {
+                    const win = checkWin(r, c);
+                    if(win) processWin(win);
+                    else if(board.flat().every(v => v !== 0)) { alert("Draw!"); initMatch(); }
+                    else {
+                        currentPlayer = currentPlayer === 1 ? 2 : 1;
+                        gameActive = true; updateStatus();
+                        if(mode === 'pvc' && currentPlayer === 2) setTimeout(cpuLogic, 600);
+                    }
+                }, 450);
                 return;
             }
         }
@@ -172,14 +297,28 @@
     function renderDisc(r, c) {
         const disc = document.createElement('div');
         disc.className = `disc ${currentPlayer===1 ? 'p1' : 'p2'}`;
-        document.getElementById(`r${r}c${c}`).appendChild(disc);
+        document.getElementsByClassName('slot')[r*7+c].appendChild(disc);
         setTimeout(() => disc.classList.add('dropped'), 20);
+    }
+
+    function cpuLogic() {
+        const valid = [0,1,2,3,4,5,6].filter(c => board[0][c] === 0);
+        for(let c of valid) { // Try to win or block
+            for(let r=5; r>=0; r--) {
+                if(board[r][c] === 0) {
+                    board[r][c] = 2; if(checkWin(r,c)){ board[r][c]=0; executeMove(c); return; }
+                    board[r][c] = 1; if(checkWin(r,c)){ board[r][c]=0; executeMove(c); return; }
+                    board[r][c] = 0; break;
+                }
+            }
+        }
+        executeMove(valid[Math.floor(Math.random()*valid.length)]);
     }
 
     function checkWin(r, c) {
         const p = board[r][c];
-        const directions = [[0,1],[1,0],[1,1],[1,-1]]; 
-        for(let [dr, dc] of directions) {
+        const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+        for(let [dr, dc] of dirs) {
             let path = [[r, c]];
             [[dr,dc], [-dr,-dc]].forEach(([sr, sc]) => {
                 let nr = r + sr, nc = c + sc;
@@ -187,82 +326,37 @@
                     path.push([nr, nc]); nr += sr; nc += sc;
                 }
             });
-            if(path.length >= 4) return path.sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+            if(path.length >= 4) return path;
         }
         return null;
     }
 
-    function cpuLogic() {
-        const valid = [0,1,2,3,4,5,6].filter(c => board[0][c] === 0);
-        if (valid.length === 0) return;
-        let chosen = valid[Math.floor(Math.random()*valid.length)];
-        for(let c of valid) {
-            for(let r=5; r>=0; r--) {
-                if(board[r][c] === 0) {
-                    board[r][c] = 2; if(checkWin(r,c)) { board[r][c]=0; executeMove(c); return; }
-                    board[r][c] = 1; if(checkWin(r,c)) { board[r][c]=0; executeMove(c); return; }
-                    board[r][c] = 0; break;
-                }
-            }
-        }
-        executeMove(chosen);
-    }
-
     function processWin(path) {
-        gameActive = false;
         const winner = currentPlayer === 1 ? 'p1' : 'p2';
         scores[winner]++;
         document.getElementById(currentPlayer===1 ? 's1' : 's2').innerText = `${currentPlayer===1?'P1':'P2'}: ${scores[winner]}`;
-        drawWinLine(path);
-        beep(400, 'square', 0.2); setTimeout(() => beep(600, 'square', 0.3), 150);
-        setTimeout(() => {
-            if(scores[winner] >= Math.ceil(maxRounds/2)) {
-                alert(`PLAYER ${currentPlayer} WINS THE MATCH!`); location.reload();
-            } else { initMatch(); }
-        }, 1800);
-    }
-
-    function drawWinLine(path) {
-        const svg = document.getElementById('win-line-svg');
-        const bRect = document.getElementById('board-ui').getBoundingClientRect();
-        const s = document.getElementById(`r${path[0][0]}c${path[0][1]}`).getBoundingClientRect();
-        const e = document.getElementById(`r${path[path.length-1][0]}c${path[path.length-1][1]}`).getBoundingClientRect();
-        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line.setAttribute("x1", s.left + s.width/2 - bRect.left);
-        line.setAttribute("y1", s.top + s.height/2 - bRect.top);
-        line.setAttribute("x2", e.left + e.width/2 - bRect.left);
-        line.setAttribute("y2", e.top + e.height/2 - bRect.top);
-        svg.appendChild(line);
+        if(scores[winner] >= Math.ceil(maxRounds/2)) {
+            alert(`PLAYER ${currentPlayer} WINS MATCH!`); location.reload();
+        } else { initMatch(); }
     }
 
     function updateStatus() {
         const s = document.getElementById('status');
-        s.innerText = currentPlayer === 1 ? "RED'S TURN" : "YELLOW'S TURN";
+        let t = currentPlayer === 1 ? "RED'S TURN" : "YELLOW'S TURN";
+        if (mode === 'online') t += (currentPlayer === playerRole ? " (YOU)" : " (FRIEND)");
+        s.innerText = t;
         s.style.color = currentPlayer === 1 ? 'var(--red)' : 'var(--yellow)';
     }
 
     function beep(f, t, d) {
         if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
         const o = audioCtx.createOscillator(), g = audioCtx.createGain();
         o.type = t; o.frequency.setValueAtTime(f, audioCtx.currentTime);
         g.gain.setValueAtTime(0.1, audioCtx.currentTime);
         g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d);
         o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + d);
     }
-    function goBackToMenu() {
-    // Hide game, show lobby
-    document.getElementById('game-screen').style.display = 'none';
-    document.getElementById('lobby').style.display = 'flex';
-    
-    // Stop the game logic
-    gameActive = false;
-    
-    // Optional: If you want to reset the scores when going back
-    scores = {p1:0, p2:0};
-    document.getElementById('s1').innerText = `P1: 0`;
-    document.getElementById('s2').innerText = `P2: 0`;
-    }
-    
 </script>
 </body>
 </html>
