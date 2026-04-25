@@ -45,6 +45,7 @@
         .btn-primary { background: var(--blue); color: #000; }
         .mode-btn { background: #374151; color: white; }
         .mode-btn.active { background: #1f2937; border: 2px solid var(--blue); }
+        .install-btn { background: #22c55e; color: white; display: none; margin-top: 15px; }
         
         #lobby, #game-screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
 
@@ -120,6 +121,7 @@
             </select>
         </div>
         <button class="btn-primary" onclick="startGame()">PLAY NOW</button>
+        <button id="install-btn" class="install-btn" onclick="installPWA()">INSTALL NEON APP</button>
     </div>
 </div>
 
@@ -149,7 +151,28 @@
 
     let mode = 'pvp', maxRounds = 1, scores = {p1:0, p2:0};
     let currentPlayer = 1, board = [], gameActive = false, audioCtx = null;
-    let gameId = null, playerRole = null;
+    let gameId = null, playerRole = null, deferredPrompt = null;
+
+    // --- PWA LOGIC ---
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').then(() => console.log("SW Registered"));
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e; // Save event for later
+        document.getElementById('install-btn').style.display = 'block'; // Show the button
+    });
+
+    async function installPWA() {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+            document.getElementById('install-btn').style.display = 'none';
+        }
+        deferredPrompt = null;
+    }
 
     window.addEventListener('load', () => {
         setTimeout(() => {
@@ -252,7 +275,7 @@
         }
         if (mode === 'online') {
             const gameRef = db.ref(`games/${gameId}`);
-            gameRef.off('value'); // Clear old round listeners
+            gameRef.off('value');
             gameRef.on('value', (s) => {
                 const d = s.val();
                 if (d && d.lastMove && d.turn === playerRole && gameActive) {
@@ -273,9 +296,9 @@
                 beep(200 + (r*40), 'sine', 0.1);
                 
                 if (mode === 'online' && !isRemote) {
-                    gameActive = false; // Pause while DB updates
+                    gameActive = false;
                     await db.ref(`games/${gameId}`).update({ 
-                        lastMove: {r, c, t: Date.now()}, // Added timestamp to ensure "newness"
+                        lastMove: {r, c, t: Date.now()},
                         turn: currentPlayer === 1 ? 2 : 1 
                     });
                 }
@@ -339,7 +362,6 @@
         } else {
             setTimeout(async () => {
                 if(mode === 'online' && playerRole === 1) {
-                    // Admin clears the board for everyone
                     await db.ref(`games/${gameId}`).update({ lastMove: null, turn: 1 });
                 }
                 initMatch();
