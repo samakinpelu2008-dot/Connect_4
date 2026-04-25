@@ -45,7 +45,7 @@
         .btn-primary { background: var(--blue); color: #000; }
         .mode-btn { background: #374151; color: white; }
         .mode-btn.active { background: #1f2937; border: 2px solid var(--blue); }
-        .install-btn { background: #22c55e; color: white; display: none; margin-top: 15px; }
+        .install-btn { background: #22c55e; color: white; display: none; }
         
         #lobby, #game-screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
 
@@ -110,6 +110,7 @@
         <button class="mode-btn active" id="btn-pvp" onclick="setMode('pvp')">2 PLAYERS (LOCAL)</button>
         <button class="mode-btn" id="btn-pvc" onclick="setMode('pvc')">VS COMPUTER</button>
         <button class="mode-btn" onclick="openOnlineOverlay()" style="border: 1px dashed var(--blue)">FRIEND MATCH (ONLINE)</button>
+        
         <div id="local-rounds-area">
             <p style="margin: 15px 0 5px;">Rounds</p>
             <select id="rounds">
@@ -120,8 +121,9 @@
                 <option value="11">11 Rounds</option>
             </select>
         </div>
+        
         <button class="btn-primary" onclick="startGame()">PLAY NOW</button>
-        <button id="install-btn" class="install-btn" onclick="installPWA()">INSTALL NEON APP</button>
+        <button id="install-btn" class="install-btn" onclick="installPWA()">INSTALL APP</button>
     </div>
 </div>
 
@@ -153,32 +155,32 @@
     let currentPlayer = 1, board = [], gameActive = false, audioCtx = null;
     let gameId = null, playerRole = null, deferredPrompt = null;
 
-    // --- PWA LOGIC ---
+    // --- PWA INSTALL LOGIC ---
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js').then(() => console.log("SW Registered"));
+        navigator.serviceWorker.register('sw.js');
     }
 
     window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
-        deferredPrompt = e; // Save event for later
-        document.getElementById('install-btn').style.display = 'block'; // Show the button
+        deferredPrompt = e;
+        document.getElementById('install-btn').style.display = 'block';
     });
 
     async function installPWA() {
         if (!deferredPrompt) return;
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
-        if (outcome === 'accepted') {
-            document.getElementById('install-btn').style.display = 'none';
-        }
+        if (outcome === 'accepted') document.getElementById('install-btn').style.display = 'none';
         deferredPrompt = null;
     }
 
+    // --- SYSTEM BOOT ---
     window.addEventListener('load', () => {
         setTimeout(() => {
             document.getElementById('loading-overlay').style.display = 'none';
             document.getElementById('lobby').style.display = 'flex';
         }, 2000);
+        
         document.getElementById('room-input').addEventListener('input', function() {
             this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
         });
@@ -193,6 +195,7 @@
     function openOnlineOverlay() { document.getElementById('online-overlay').style.display = 'flex'; }
     function closeOnlineOverlay() { document.getElementById('online-overlay').style.display = 'none'; }
 
+    // --- ONLINE SYNC ENGINE ---
     async function initiateConnection() {
         const val = document.getElementById('room-input').value.trim();
         if (!val) return;
@@ -225,7 +228,7 @@
                     document.getElementById('admin-setup').style.display = 'block';
                 }
             } else {
-                document.getElementById('search-status').innerText = "WAITING FOR ADMIN...";
+                document.getElementById('search-status').innerText = "CONNECTED! WAITING FOR ADMIN...";
                 if (d.gameStarted) {
                     maxRounds = d.rounds; mode = 'online';
                     document.getElementById('online-overlay').style.display = 'none';
@@ -244,6 +247,7 @@
         startGame();
     }
 
+    // --- MAIN GAME LOGIC ---
     function startGame() {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (mode !== 'online') maxRounds = parseInt(document.getElementById('rounds').value);
@@ -275,7 +279,7 @@
         }
         if (mode === 'online') {
             const gameRef = db.ref(`games/${gameId}`);
-            gameRef.off('value');
+            gameRef.off('value'); 
             gameRef.on('value', (s) => {
                 const d = s.val();
                 if (d && d.lastMove && d.turn === playerRole && gameActive) {
